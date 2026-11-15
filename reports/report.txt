@@ -1,0 +1,53 @@
+LAB 6 — raport before/after
+Wejście: data\raw\california_housing_dirty.csv
+Wyjście: output\cleaned.csv
+
+=== BEFORE ===
+Wiersze=30, kolumny=10, duplikaty=3
+                      dtype  missing  missing_pct  unique
+longitude           float64        0         0.00      21
+latitude            float64        0         0.00      18
+housing_median_age    int64        0         0.00      19
+total_rooms           int64        0         0.00      27
+total_bedrooms      float64        2         6.67      23
+population            int64        0         0.00      25
+households          float64        1         3.33      26
+median_income       float64        2         6.67      24
+median_house_value    int64        0         0.00      27
+ocean_proximity         str        1         3.33       4
+
+=== AFTER ===
+Wiersze=24, kolumny=11, duplikaty=0
+                                 dtype  missing  missing_pct  unique
+longitude                      float64        0          0.0      18
+latitude                       float64        0          0.0      15
+housing_median_age               int64        0          0.0      17
+total_rooms                      int64        0          0.0      24
+total_bedrooms                 float64        0          0.0      22
+population                       int64        0          0.0      24
+households                     float64        0          0.0      24
+median_income                  float64        0          0.0      23
+median_house_value               int64        0          0.0      24
+ocean_proximity                    str        0          0.0       4
+is_outlier_median_house_value     bool        0          0.0       2
+
+=== AUDIT LOG ===
+- Usunięto pełne duplikaty: 3 | przed=30, po=27, zmieniono=3
+- Braki w 'total_bedrooms' strategią 'median' (braków przed=2) | przed=27, po=27, zmieniono=0
+- Braki w 'ocean_proximity' strategią 'mode' (braków przed=1) | przed=27, po=27, zmieniono=0
+- Braki w 'median_income' strategią 'median' (braków przed=2) | przed=27, po=27, zmieniono=0
+- Braki w 'households' strategią 'drop' (braków przed=1) | przed=27, po=26, zmieniono=1
+- Reguła zakresu 'longitude' [-124.5, -114.0]: wykryto=1 (bez zmian danych)
+- Usunięto rekordy poza zakresem 'longitude' [-124.5, -114.0]: 1 | przed=26, po=25, zmieniono=1
+- Reguła zakresu 'latitude' [32.0, 42.5]: wykryto=1 (bez zmian danych)
+- Usunięto rekordy poza zakresem 'latitude' [32.0, 42.5]: 1 | przed=25, po=24, zmieniono=1
+- Reguła zakresu 'housing_median_age' [0, 100]: wykryto=0 (bez zmian danych)
+- Usunięto rekordy poza zakresem 'housing_median_age' [0, 100]: 0 | przed=24, po=24, zmieniono=0
+- IQR outliery 'median_house_value' (factor=1.5): wykryto=2 (bez zmian danych)
+- Oznaczono IQR outliery 'median_house_value' kolumną 'is_outlier_median_house_value': 2
+
+=== DECYZJE ===
+- Braki: median/mode dla wybranych kolumn; drop dla households
+- Zakres: usuwanie rekordów poza sensownym zakresem geograficznym/wieku
+- Outliery median_house_value: oznaczenie kolumną flagi (nie usuwanie),
+  bo ekstremalne ceny mogą być prawdziwe i wymagają decyzji analityka
