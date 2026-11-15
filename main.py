@@ -4,18 +4,37 @@ from src.session import DataSession
 
 
 def main() -> None:
-    dirty = Path("data/raw/california_housing_dirty.csv")
-    comma = Path("data/test/sample_comma.csv")
-    semicolon = Path("data/test/sample_semicolon.csv")
+    path = Path("data/raw/california_housing_dirty.csv")
+    session = DataSession.from_csv(path)
 
-    for path in (dirty, comma, semicolon):
-        session = DataSession.from_csv(path)
-        print("=" * 60)
-        print(f"Plik: {path}")
-        print(f"Wiersze={session.summary()['rows']}, "
-              f"kolumny={session.summary()['columns']}, "
-              f"duplikaty={session.summary()['duplicate_rows']}")
-        print(session.profile())
+    print("BEFORE")
+    print(session.summary())
+    print(session.profile())
+    print()
+
+    session.drop_exact_duplicates()
+    session.handle_missing("total_bedrooms", strategy="median")
+    session.handle_missing("ocean_proximity", strategy="mode")
+    session.apply_range_rule("longitude", -124.5, -114.0, action="report")
+    session.apply_range_rule("longitude", -124.5, -114.0, action="remove")
+    session.apply_range_rule("latitude", 32.0, 42.5, action="remove")
+    session.apply_range_rule("housing_median_age", 0, 100, action="remove")
+    session.handle_outliers("median_house_value", factor=1.5, action="report")
+    session.handle_outliers("median_house_value", factor=1.5, action="mark")
+
+    print("AFTER")
+    print(session.summary())
+    print(session.profile())
+    print()
+    print("AUDIT LOG")
+    for line in session.audit_log:
+        print("-", line)
+
+    session.reset()
+    print()
+    print("AFTER RESET")
+    print(session.summary())
+    print(session.audit_log[-1])
 
 
 if __name__ == "__main__":
