@@ -1,4 +1,4 @@
-LAB 6 — raport before/after
+Raport before/after — czyszczenie danych
 Wejście: data\raw\california_housing_dirty.csv
 Wyjście: output\cleaned.csv
 

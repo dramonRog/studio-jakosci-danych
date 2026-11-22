@@ -188,27 +188,135 @@ def save_figure(fig: Figure, path: Path) -> None:
     fig.savefig(path, bbox_inches="tight")
 
 
+def _numeric_frame(session: DataSession) -> pd.DataFrame:
+    """Ramka tylko z kolumn liczbowych (bez flag outlierów)."""
+    frame = session.current.copy()
+    drop_cols = [c for c in frame.columns if str(c).startswith("is_outlier_")]
+    frame = frame.drop(columns=drop_cols, errors="ignore")
+    numeric = frame.select_dtypes(include="number")
+    if numeric.shape[1] < 2:
+        raise ValueError("Do korelacji potrzebne są co najmniej 2 kolumny liczbowe")
+    return numeric
+
+
+def correlation_figure(session: DataSession, title_suffix: str = "") -> Figure:
+    """Heatmapa korelacji Pearsona dla kolumn liczbowych."""
+    numeric = _numeric_frame(session)
+    corr = numeric.corr(numeric_only=True)
+
+    fig = Figure(figsize=(8, 6), dpi=100)
+    ax = fig.add_subplot()
+    sns.heatmap(
+        corr,
+        ax=ax,
+        cmap="coolwarm",
+        center=0,
+        annot=True,
+        fmt=".2f",
+        square=True,
+        cbar_kws={"shrink": 0.8},
+    )
+    title = "Macierz korelacji (Pearson)"
+    if title_suffix:
+        title = f"{title} ({title_suffix})"
+    ax.set_title(title)
+    fig.tight_layout()
+    return fig
+
+
+STANDARD_CHART_SPECS: list[tuple[str, str, dict]] = [
+    ("hist_median_income", "histogram", {"column": "median_income"}),
+    (
+        "scatter_income_value",
+        "scatter",
+        {"x": "median_income", "y": "median_house_value"},
+    ),
+    (
+        "box_value_by_ocean",
+        "box",
+        {"column": "median_house_value", "by": "ocean_proximity"},
+    ),
+    ("bar_ocean_proximity", "bar", {"column": "ocean_proximity"}),
+]
+
+
+def export_standard_charts(
+    session: DataSession,
+    out_dir: Path,
+    stage: str,
+) -> list[Path]:
+    """
+    Zapisuje zestaw 4 wykresów dla wskazanego etapu (before/after).
+    stage trafia do nazwy pliku i tytułu.
+    """
+    saved: list[Path] = []
+    for stem, chart_type, params in STANDARD_CHART_SPECS:
+        fig = build_figure(session, chart_type, **params)
+        if fig.axes:
+            base_title = fig.axes[0].get_title()
+            fig.axes[0].set_title(f"{base_title} ({stage})")
+        path = out_dir / f"{stem}_{stage}.png"
+        save_figure(fig, path)
+        saved.append(path)
+    return saved
+
+
+def export_correlation_chart(
+    session: DataSession,
+    out_dir: Path,
+    stage: str,
+) -> Path:
+    fig = correlation_figure(session, title_suffix=stage)
+    path = out_dir / f"correlation_{stage}.png"
+    save_figure(fig, path)
+    return path
+
+
+def write_correlation_notes(
+    path: Path,
+    before_session: DataSession,
+    after_session: DataSession,
+) -> None:
+    """Krótka interpretacja korelacji — bez mylenia z przyczynowością."""
+    before_corr = _numeric_frame(before_session).corr(numeric_only=True)
+    after_corr = _numeric_frame(after_session).corr(numeric_only=True)
+
+    pair = ("median_income", "median_house_value")
+    before_val = (
+        float(before_corr.loc[pair[0], pair[1]])
+        if pair[0] in before_corr.columns and pair[1] in before_corr.columns
+        else float("nan")
+    )
+    after_val = (
+        float(after_corr.loc[pair[0], pair[1]])
+        if pair[0] in after_corr.columns and pair[1] in after_corr.columns
+        else float("nan")
+    )
+
+    lines = [
+        "Notatki korelacji (Pearson)",
+        "",
+        f"Para podsumowana: {pair[0]} vs {pair[1]}",
+        f"- before: {before_val:.3f}",
+        f"- after:  {after_val:.3f}",
+        "",
+        "Interpretacja:",
+        "- Współczynnik korelacji opisuje siłę i kierunek związku liniowego",
+        "  między zmiennymi, a nie to, że jedna zmienna powoduje drugą.",
+        "- Nawet wysoka korelacja income–house_value nie oznacza przyczynowości:",
+        "  na cenę wpływają też lokalizacja, wiek zabudowy, podaż itd.",
+        "- Porównanie before/after pokazuje, jak czyszczenie danych zmienia",
+        "  obraz zależności (np. po usunięciu błędnych zakresów), ale nadal",
+        "  nie uprawnia do wniosków przyczynowo-skutkowych.",
+    ]
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("\n".join(lines), encoding="utf-8")
+
+
 if __name__ == "__main__":
     demo_session = DataSession.from_csv(Path("data/raw/california_housing_dirty.csv"))
     out_dir = Path("output/figures")
-
-    demos = [
-        ("hist_median_income_raw.png", "histogram", {"column": "median_income"}),
-        (
-            "scatter_income_value_raw.png",
-            "scatter",
-            {"x": "median_income", "y": "median_house_value"},
-        ),
-        (
-            "box_value_by_ocean_raw.png",
-            "box",
-            {"column": "median_house_value", "by": "ocean_proximity"},
-        ),
-        ("bar_ocean_proximity_raw.png", "bar", {"column": "ocean_proximity"}),
-    ]
-
-    for filename, chart_type, params in demos:
-        fig = build_figure(demo_session, chart_type, **params)
-        path = out_dir / filename
-        save_figure(fig, path)
+    for path in export_standard_charts(demo_session, out_dir, stage="before"):
         print(f"Zapisano: {path}")
+    corr_path = export_correlation_chart(demo_session, out_dir, stage="before")
+    print(f"Zapisano: {corr_path}")

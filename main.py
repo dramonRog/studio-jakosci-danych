@@ -1,5 +1,10 @@
 from pathlib import Path
 
+from src.plots import (
+    export_correlation_chart,
+    export_standard_charts,
+    write_correlation_notes,
+)
 from src.session import DataSession
 
 
@@ -7,26 +12,15 @@ def format_profile(profile) -> str:
     return profile.to_string()
 
 
-def run_lab6_pipeline(
-    input_path: Path,
-    cleaned_path: Path,
-    report_path: Path,
-) -> None:
-    session = DataSession.from_csv(input_path)
-
-    before_summary = session.summary()
-    before_profile = session.profile().copy()
-
-    # 1) Duplikaty
+def apply_cleaning(session: DataSession) -> None:
+    """Pipeline czyszczenia na bieżącej sesji (modyfikuje current + audit_log)."""
     session.drop_exact_duplicates()
 
-    # 2) Braki — dwie strategie: imputacja + drop
     session.handle_missing("total_bedrooms", strategy="median")
     session.handle_missing("ocean_proximity", strategy="mode")
     session.handle_missing("median_income", strategy="median")
     session.handle_missing("households", strategy="drop")
 
-    # 3) Reguły zakresu: najpierw report, potem decyzja (remove)
     session.apply_range_rule("longitude", -124.5, -114.0, action="report")
     session.apply_range_rule("longitude", -124.5, -114.0, action="remove")
     session.apply_range_rule("latitude", 32.0, 42.5, action="report")
@@ -34,10 +28,18 @@ def run_lab6_pipeline(
     session.apply_range_rule("housing_median_age", 0, 100, action="report")
     session.apply_range_rule("housing_median_age", 0, 100, action="remove")
 
-    # 4) Outliery IQR: najpierw report, potem oznaczenie (bez ślepego usuwania)
     session.handle_outliers("median_house_value", factor=1.5, action="report")
     session.handle_outliers("median_house_value", factor=1.5, action="mark")
 
+
+def run_cleaning_report(
+    session: DataSession,
+    input_path: Path,
+    cleaned_path: Path,
+    report_path: Path,
+    before_summary: dict,
+    before_profile,
+) -> None:
     after_summary = session.summary()
     after_profile = session.profile().copy()
 
@@ -47,7 +49,7 @@ def run_lab6_pipeline(
     session.current.to_csv(cleaned_path, index=False)
 
     report_lines = [
-        "LAB 6 — raport before/after",
+        "Raport before/after — czyszczenie danych",
         f"Wejście: {input_path}",
         f"Wyjście: {cleaned_path}",
         "",
@@ -77,11 +79,55 @@ def run_lab6_pipeline(
     print(f"Wiersze po czyszczeniu: {after_summary['rows']}")
 
 
+def run_visualization(
+    before_session: DataSession,
+    after_session: DataSession,
+    figures_dir: Path,
+    notes_path: Path,
+) -> None:
+    figures_dir.mkdir(parents=True, exist_ok=True)
+
+    for path in export_standard_charts(before_session, figures_dir, stage="before"):
+        print(f"Zapisano: {path}")
+    for path in export_standard_charts(after_session, figures_dir, stage="after"):
+        print(f"Zapisano: {path}")
+
+    before_corr = export_correlation_chart(
+        before_session, figures_dir, stage="before"
+    )
+    after_corr = export_correlation_chart(after_session, figures_dir, stage="after")
+    print(f"Zapisano: {before_corr}")
+    print(f"Zapisano: {after_corr}")
+
+    write_correlation_notes(notes_path, before_session, after_session)
+    print(f"Zapisano: {notes_path}")
+
+
 def main() -> None:
-    run_lab6_pipeline(
-        input_path=Path("data/raw/california_housing_dirty.csv"),
+    input_path = Path("data/raw/california_housing_dirty.csv")
+    session = DataSession.from_csv(input_path)
+
+    # Osobna sesja „before”: current == raw (bez czyszczenia)
+    before_session = DataSession(session.raw.copy(deep=True))
+
+    before_summary = session.summary()
+    before_profile = session.profile().copy()
+
+    apply_cleaning(session)
+    run_cleaning_report(
+        session=session,
+        input_path=input_path,
         cleaned_path=Path("output/cleaned.csv"),
         report_path=Path("reports/report.txt"),
+        before_summary=before_summary,
+        before_profile=before_profile,
+    )
+
+    run_visualization(
+        before_session=before_session,
+        after_session=session,
+        figures_dir=Path("output/figures"),
+        notes_path=Path("reports/correlation_notes.txt"),
     )
 
 

@@ -1,0 +1,14 @@
+Notatki korelacji (Pearson)
+
+Para podsumowana: median_income vs median_house_value
+- before: 0.077
+- after:  0.084
+
+Interpretacja:
+- Współczynnik korelacji opisuje siłę i kierunek związku liniowego
+  między zmiennymi, a nie to, że jedna zmienna powoduje drugą.
+- Nawet wysoka korelacja income–house_value nie oznacza przyczynowości:
+  na cenę wpływają też lokalizacja, wiek zabudowy, podaż itd.
+- Porównanie before/after pokazuje, jak czyszczenie danych zmienia
+  obraz zależności (np. po usunięciu błędnych zakresów), ale nadal
+  nie uprawnia do wniosków przyczynowo-skutkowych.
